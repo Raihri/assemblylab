@@ -1,0 +1,58 @@
+        AREA Module8, CODE, READONLY
+        EXPORT Calc_FinalBill
+        IMPORT BILLING_ARRAY
+        IMPORT LAB_TEST_COST
+        IMPORT ERROR_FLAGS
+        IMPORT MAX_PATIENTS
+        IMPORT BILL_SIZE
+
+Calc_FinalBill
+        MOV R0, #0                          ; patient index
+
+FinalLoop
+        LDR R10, =MAX_PATIENTS              ; load max
+        LDR R10, [R10]
+        CMP R0, R10
+        BEQ FinalDone
+
+        LDR R1, =BILLING_ARRAY              ; base billing
+        LDR R2, =BILL_SIZE
+        LDR R2, [R2]
+        MUL R3, R0, R2
+        ADD R1, R1, R3                      ; R1 = billing[i]
+
+        LDR R4, [R1, #0]                    ; treatment
+        LDR R5, [R1, #4]                    ; room
+        LDR R6, [R1, #8]                    ; medicine
+
+        LDR R7, =LAB_TEST_COST              ; lab cost
+        LDR R7, [R7]
+
+        MOV R8, #0                          ; accumulator
+
+        ADDS R8, R8, R4                     ; check overflow
+        BVS BillErr
+        ADDS R8, R8, R5
+        BVS BillErr
+        ADDS R8, R8, R6
+        BVS BillErr
+        ADDS R8, R8, R7
+        BVS BillErr
+
+        STR R8, [R1, #12]                   ; store final bill
+
+        ADD R0, R0, #1
+        B FinalLoop
+
+BillErr
+        LDR R9, =ERROR_FLAGS                ; store error flag
+        ADD R9, R9, R0
+        MOV R11, #1
+        STRB R11, [R9]
+
+        ADD R0, R0, #1
+        B FinalLoop
+
+FinalDone
+        BX LR
+        END
