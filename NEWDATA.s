@@ -18,7 +18,7 @@
         EXPORT ALERT_BUFFERS_BASE
         EXPORT ALERT_RECORD_SIZE
 		EXPORT ALERT_FLAG_ARRAY
-
+        EXPORT CURRENT_TIME_COUNTER
 
         EXPORT MED_INTERVAL_ARRAY
         EXPORT MED_LAST_ADMIN_ARRAY
@@ -46,6 +46,10 @@ ALERT_BUFFERS_BASE  DCD 0x20001000  ; base of alert buffers
 ALERT_COUNT_ARRAY   SPACE 4*3
 ALERT_FLAG_ARRAY    SPACE 3
 
+; Internal clock counter (seconds / time units)
+CURRENT_TIME_COUNTER	 DCD 0           ; initialize to 0
+
+       
 
        
 
@@ -69,11 +73,15 @@ O2_SENSORS DCD O2_SENSOR1, O2_SENSOR2, O2_SENSOR3
 	
 	
 	
-MED_INTERVAL_ARRAY      SPACE 4*4
-MED_LAST_ADMIN_ARRAY    SPACE 4*4
-DOSAGE_DUE_ARRAY        SPACE 4    ; byte flags
+MED_INTERVAL_ARRAY	 DCD 6, 8, 12        ; hours per patient
 
+       
+MED_LAST_ADMIN_ARRAY	 DCD 480, 460, 450   ; timestamps
 
+       
+DOSAGE_DUE_ARRAY	 DCB 0, 0, 0
+       
+		
 ; Lookup table
 TREATMENT_TABLE DCD 0,10000,15000,20000,25000
 
