@@ -5,9 +5,7 @@
         IMPORT ALERT_COUNT_ARRAY
         IMPORT ALERT_BUFFERS_BASE
 
-; -------------------------------------
-; Vital_Alert_Handler
-; -------------------------------------
+
 
 Vital_Alert_Handler
         MOV R4, #0
@@ -41,9 +39,7 @@ AlertLoop
 
         B NextPatient
 
-; ------------------------------------------
-; STORE 16-BYTE ALERT RECORD
-; ------------------------------------------
+
 MakeAlert
         LDR R0, =ALERT_BUFFERS_BASE
         ADD R0, R0, R4, LSL #8     ; 256 bytes per patient
@@ -51,7 +47,7 @@ MakeAlert
         LDR R1, =ALERT_COUNT_ARRAY
         LDR R9, [R1, R4, LSL #2]   ; record index
 
-        LSL R9, R9, #4             ; index × 16
+        LSL R9, R9, #4             ; index Ã— 16
 
         ; temp = base + indexOffset
         ADD R3, R0, R9
@@ -68,7 +64,7 @@ MakeAlert
 
         ; Increment alert count
         ADD R9, R9, #1
-        LSR R9, R9, #4             ; undo ×16 to get index again
+        LSR R9, R9, #4             ; undo Ã—16 to get index again
         STR R9, [R1, R4, LSL #2]
 
 NextPatient
@@ -78,3 +74,4 @@ NextPatient
 AlertDone
         BX LR
         END
+
