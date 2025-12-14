@@ -54,9 +54,9 @@ ALERT_FLAG_ARRAY    SPACE 3
 
 ; Internal clock counter (seconds / time units)
 ;CURRENT_TIME_COUNTER	 DCD 0           ; initialize to 0
-DOSAGE_DUE_ARRAY	SPACE 12         ; 4 patients × 4 bytes (example)
+DOSAGE_DUE_ARRAY	SPACE 12         ; 3 patients × 4 bytes (example)
        
-MED_DAYS   DCD 7        
+STAY_DAYS   DCD 7,15,3        
 
        
 
@@ -79,9 +79,9 @@ BP_SENSORS DCD BP_SENSOR1, BP_SENSOR2, BP_SENSOR3
 O2_SENSORS DCD O2_SENSOR1, O2_SENSOR2, O2_SENSOR3
 	
 ; --- Module 11 state ---
-ERROR_FLAG        SPACE 1
-ERROR_FLASH_LOG   SPACE 64
-ERROR_LOG_INDEX   DCD 0
+ERROR_FLAG        SPACE 3
+ERROR_FLASH_LOG   SPACE 192 ; 64 bytes for 3 
+ERROR_LOG_INDEX   DCD 0,0,0
 	
 ;MED_INTERVAL_ARRAY	 DCD 6, 8, 12        ; hours per patient
 
@@ -96,3 +96,4 @@ ERROR_LOG_INDEX   DCD 0
 TREATMENT_TABLE DCD 0,10000,15000,20000,25000
 
         END
+
