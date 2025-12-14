@@ -18,11 +18,11 @@
         EXPORT ALERT_BUFFERS_BASE
         EXPORT ALERT_RECORD_SIZE
 		EXPORT ALERT_FLAG_ARRAY
-        EXPORT CURRENT_TIME_COUNTER
+       ; EXPORT CURRENT_TIME_COUNTER
 
-        EXPORT MED_INTERVAL_ARRAY
-        EXPORT MED_LAST_ADMIN_ARRAY
-        EXPORT DOSAGE_DUE_ARRAY
+      ;  EXPORT MED_INTERVAL_ARRAY
+      ;  EXPORT MED_LAST_ADMIN_ARRAY
+      ; EXPORT DOSAGE_DUE_ARRAY
 
 ; Constants stored as memory words
 MAX_PATIENTS    DCD 3
@@ -31,7 +31,7 @@ BILL_SIZE       DCD 16
 
 ; Arrays
 PATIENT_ARRAY   EQU 0x20000000   
-BILLING_ARRAY   SPACE 16 * 3
+BILLING_ARRAY   EQU 0x20000500
 
 ;buffer
 
@@ -47,7 +47,7 @@ ALERT_COUNT_ARRAY   SPACE 4*3
 ALERT_FLAG_ARRAY    SPACE 3
 
 ; Internal clock counter (seconds / time units)
-CURRENT_TIME_COUNTER	 DCD 0           ; initialize to 0
+;CURRENT_TIME_COUNTER	 DCD 0           ; initialize to 0
 
        
 
@@ -73,13 +73,13 @@ O2_SENSORS DCD O2_SENSOR1, O2_SENSOR2, O2_SENSOR3
 	
 	
 	
-MED_INTERVAL_ARRAY	 DCD 6, 8, 12        ; hours per patient
+;MED_INTERVAL_ARRAY	 DCD 6, 8, 12        ; hours per patient
 
        
-MED_LAST_ADMIN_ARRAY	 DCD 480, 460, 450   ; timestamps
+;MED_LAST_ADMIN_ARRAY	 DCD 480, 460, 450   ; timestamps
 
        
-DOSAGE_DUE_ARRAY	 DCB 0, 0, 0
+;DOSAGE_DUE_ARRAY	 DCB 0, 0, 0
        
 		
 ; Lookup table
