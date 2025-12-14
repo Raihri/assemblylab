@@ -1,121 +1,120 @@
-        AREA Module3, CODE, READONLY
-        EXPORT Vital_Alert_Handler
+		AREA Module3, CODE, READONLY
+		EXPORT Vital_Alert_Handler
 
-        IMPORT PATIENT_ARRAY
-        IMPORT VITAL_INDEX
-        IMPORT MAX_PATIENTS
-        IMPORT ALERT_COUNT_ARRAY
-        IMPORT ALERT_FLAG_ARRAY
-        IMPORT ALERT_BUFFERS_BASE
+		IMPORT PATIENT_ARRAY
+		IMPORT VITAL_INDEX
+		IMPORT MAX_PATIENTS
+		IMPORT ALERT_COUNT_ARRAY
+		IMPORT ALERT_FLAG_ARRAY
+		IMPORT ALERT_BUFFERS_BASE
 
 Vital_Alert_Handler
-        MOV R4, #0                      ; patient index
+    PUSH {R4-R12, LR}          ; Save ALL registers
+    MOV R4, #0                 ; patient index
 
 AlertLoop
-        LDR R10, =MAX_PATIENTS
-        LDR R10, [R10]
-        CMP R4, R10
-        BEQ AlertDone
+    ; Check if done with all patients
+    CMP R4, #3
+    BGE AlertDone
 
-        ; --------------------------------
-        ; Load patient struct pointer
-        ; --------------------------------
-        LDR R0, =PATIENT_ARRAY
-        LDR R5, [R0, R4, LSL #2]        ; R5 = patient struct ptr
+    ; ----- Get patient struct address -----
+    LDR R0, =PATIENT_ARRAY
+    MOV R5, #44               ; Patient struct size
+    MUL R5, R4, R5            ; index * 44
+    ADD R5, R0, R5            ; R5 = &PATIENT_ARRAY[index]
 
-        ; --------------------------------
-        ; Load rolling index
-        ; --------------------------------
-        LDR R6, =VITAL_INDEX
-        LDRB R7, [R6, R4]               ; current index (0–9)
+    ; ----- Load rolling index -----
+    LDR R6, =VITAL_INDEX
+    LDRB R7, [R6, R4]         ; R7 = current index (0-9)
+    
+    ; Check if index is valid (0-9)
+    CMP R7, #10
+    BGE NextPatient           ; Skip if invalid
 
-        ; last_index = (index - 1 + 10) % 10
-        CMP R7, #0
-        BNE NotZero
-        MOV R7, #9
-        B IndexOK
-NotZero
-        SUB R7, R7, #1
-IndexOK
+    ; ----- Load buffer pointers -----
+    LDR R8,  [R5, #24]        ; HR buffer
+    LDR R9,  [R5, #28]        ; BP buffer
+    LDR R11, [R5, #32]        ; O2 buffer
 
-        ; --------------------------------
-        ; Load buffer pointers
-        ; --------------------------------
-        LDR R8,  [R5, #24]              ; HR buffer
-        LDR R9,  [R5, #28]              ; BP buffer
-        LDR R11, [R5, #32]              ; O2 buffer
+    ; Check if buffers exist
+    CMP R8, #0
+    BEQ NextPatient
+    CMP R9, #0
+    BEQ NextPatient
+    CMP R11, #0
+    BEQ NextPatient
 
-        ; --------------------------------
-        ; Load latest readings
-        ; --------------------------------
-        LDR R12, [R8,  R7, LSL #2]      ; HR
-        LDR R2,  [R9,  R7, LSL #2]      ; SBP
-        LDR R3,  [R11, R7, LSL #2]      ; O2
+    ; ----- Load LATEST readings (at current index) -----
+    LDR R12, [R8, R7, LSL #2] ; HR
+    LDR R2,  [R9, R7, LSL #2] ; SBP
+    LDR R3,  [R11, R7, LSL #2] ; O2
 
-        ; --------------------------------
-        ; Threshold checks
-        ; --------------------------------
-        CMP R12, #120
-        BGT RaiseAlert
+    ; ----- Threshold checks -----
+    CMP R12, #120
+    BGT RaiseAlert
 
-        CMP R3, #92
-        BLT RaiseAlert
+    CMP R3, #92
+    BLT RaiseAlert
 
-        CMP R2, #160
-        BGT RaiseAlert
+    CMP R2, #160
+    BGT RaiseAlert
 
-        CMP R2, #90
-        BLT RaiseAlert
+    CMP R2, #90
+    BLT RaiseAlert
 
-        B NextPatient
+    B NextPatient
 
 ; =====================================
 ; ALERT HANDLING
 ; =====================================
 RaiseAlert
-        ; --------------------------------
-        ; Set ALERT FLAG = 1
-        ; --------------------------------
-        LDR R0, =ALERT_FLAG_ARRAY
-        MOV R1, #1
-        STRB R1, [R0, R4]
+    ; ----- Save patient struct address (R5) -----
+    PUSH {R5}
 
-        ; --------------------------------
-        ; Compute alert buffer base
-        ; --------------------------------
-        LDR R0, =ALERT_BUFFERS_BASE
-        ADD R0, R0, R4, LSL #7          ; 128 bytes per patient
+    ; ----- Set ALERT FLAG = 1 -----
+    LDR R0, =ALERT_FLAG_ARRAY
+    MOV R1, #1
+    STRB R1, [R0, R4]
 
-        ; alert index
-        LDR R1, =ALERT_COUNT_ARRAY
-        LDR R6, [R1, R4, LSL #2]
+    ; ----- Compute alert buffer base -----
+    LDR R0, =ALERT_BUFFERS_BASE
+    LDR R0, [R0]               ; Load the base address value
+    MOV R1, #128               ; 128 bytes per patient
+    MUL R6, R4, R1             ; R6 = patient_index * 128
+    ADD R0, R0, R6             ; R0 = base for this patient
 
-        LSL R6, R6, #4                  ; ×16 bytes
-        ADD R7, R0, R6                  ; alert record address
+    ; ----- Get alert count -----
+    LDR R1, =ALERT_COUNT_ARRAY
+    LDR R6, [R1, R4, LSL #2]   ; R6 = alert count
 
-        ; --------------------------------
-        ; Write 16-byte alert record
-        ; --------------------------------
-        MOV R5, #1
-        STRB R5, [R7]                   ; +0 vital type (1 = critical)
+    ; Calculate offset: alert_count * 16
+    MOV R10, #16
+    MUL R10, R6, R10           ; R10 = alert_count * 16
+    ADD R10, R0, R10           ; R10 = alert record address
 
-        STRB R12, [R7, #1]              ; +1 HR
-        STRH R2,  [R7, #2]              ; +2 SBP
-        STRB R3,  [R7, #4]              ; +4 O2
+        ; ----- Write 16-byte alert record -----
+    MOV R0, #1                 ; Alert type = critical
+    STRB R0, [R10]             ; +0 vital type
 
-        STR R6,  [R7, #8]               ; +8 timestamp (counter)
+    STRB R12, [R10, #1]        ; +1 HR
+    STRH R2, [R10, #2]         ; +2 SBP (values 90-160 fit in halfword)
+    STRB R3, [R10, #4]         ; +4 O2
 
-        ; --------------------------------
-        ; Increment alert count
-        ; --------------------------------
-        LDR R6, [R1, R4, LSL #2]
-        ADD R6, R6, #1
-        STR R6, [R1, R4, LSL #2]
+    MOV R0, #0
+    STR R0, [R10, #8]          ; +8 timestamp    ; +8 timestamp
+
+    ; ----- Increment alert count -----
+    ADD R6, R6, #1
+    STR R6, [R1, R4, LSL #2]
+
+    ; ----- Restore patient struct address -----
+    POP {R5}
 
 NextPatient
-        ADD R4, R4, #1
-        B AlertLoop
+    ADD R4, R4, #1
+    B AlertLoop
 
 AlertDone
-        BX LR
-        END
+    POP {R4-R12, PC}           ; Return properly
+
+    END
