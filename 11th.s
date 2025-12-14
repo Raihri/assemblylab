@@ -1,124 +1,159 @@
         AREA Module11, CODE, READONLY
-        EXPORT Module11_Run
+        EXPORT Anomaly_Check_Handler
 
+        IMPORT MAX_PATIENTS
         IMPORT HR_BUFFER
         IMPORT BP_BUFFER
         IMPORT O2_BUFFER
-        IMPORT DOSAGE_DUE_ARRAY
+        IMPORT VITAL_INDEX
+        IMPORT MED_INTERVAL_ARRAY
         IMPORT ERROR_FLAG
         IMPORT ERROR_FLASH_LOG
         IMPORT ERROR_LOG_INDEX
 
-; -----------------------------
-; CONSTANTS
-; -----------------------------
-RAM_END         EQU 0x20008000
-SENSOR_REPEAT   EQU 10
+; ------------------------------
+; Constants
+; ------------------------------
+SENSOR_STUCK     EQU 1
+INVALID_DOSAGE   EQU 2
+MEMORY_OVERFLOW  EQU 3
 
-; -----------------------------
-; MODULE 11 ENTRY
-; -----------------------------
-Module11_Run
-        PUSH {R0-R12, LR}
+BUF_WORDS        EQU 10              ; rolling buffer length
+REC_SIZE         EQU 16              ; 16-byte error record
+FLASH_BLOCK      EQU 64              ; 64 bytes per patient
 
-; =============================
-; 1. SENSOR MALFUNCTION CHECK
-; =============================
-        LDR R0, =HR_BUFFER
-        BL Check_Repeated
+; ------------------------------
+; Entry
+; ------------------------------
+Anomaly_Check_Handler
+        PUSH {R4-R12, LR}
 
-        LDR R0, =BP_BUFFER
-        BL Check_Repeated
+        MOV  R4, #0                  ; patient index
+Chk_Patient
+        LDR  R0, =MAX_PATIENTS
+        LDR  R0, [R0]
+        CMP  R4, R0
+        BGE  Done
 
-        LDR R0, =O2_BUFFER
-        BL Check_Repeated
+        ; -------- Check sensor stuck (HR/BP/O2) --------
+        LDR  R5, =HR_BUFFER
+        MOV  R6, #40                 ; 10 words * 4 bytes
+        MUL  R6, R4, R6
+        ADD  R5, R5, R6
+        BL   Check_Buffer_AllSame
+        CMP  R0, #0
+        BEQ  SensorErr
 
-; =============================
-; 2. INVALID DOSAGE CHECK
-; =============================
-        LDR R0, =DOSAGE_DUE_ARRAY
-        MOV R1, #3              ; 3 patients
+        LDR  R5, =BP_BUFFER
+        MOV  R6, #40
+        MUL  R6, R4, R6
+        ADD  R5, R5, R6
+        BL   Check_Buffer_AllSame
+        CMP  R0, #0
+        BEQ  SensorErr
 
-DosageLoop
-        LDRB R2, [R0], #1
-        CMP R2, #0
-        BEQ Set_Error
-        SUBS R1, R1, #1
-        BNE DosageLoop
+        LDR  R5, =O2_BUFFER
+        MOV  R6, #40
+        MUL  R6, R4, R6
+        ADD  R5, R5, R6
+        BL   Check_Buffer_AllSame
+        CMP  R0, #0
+        BEQ  SensorErr
 
-; =============================
-; 3. MEMORY OVERFLOW CHECK
-; =============================
-        LDR R9, =HR_BUFFER
-        ADD R9, R9, #120        ; buffer size
+        ; -------- Check invalid medicine dosage --------
+        LDR  R7, =MED_INTERVAL_ARRAY
+        LDR  R8, [R7, R4, LSL #2]
+        CMP  R8, #0
+        BEQ  DosageErr
 
-        LDR R10, =RAM_END
-        CMP R9, R10
-        BHI Set_Error
+NextP
+        ADD  R4, R4, #1
+        B    Chk_Patient
 
-        POP {R0-R12, LR}
-        BX LR
+; ------------------------------
+; Errors funnel here
+; ------------------------------
+SensorErr
+        MOV  R0, #SENSOR_STUCK
+        MOV  R1, R4                  ; pass patient index
+        BL   Handle_Error
+        B    NextP
 
-; =============================
-; ERROR HANDLER
-; =============================
-Set_Error
-        LDR R0, =ERROR_FLAG
-        MOV R1, #1
-        STRB R1, [R0]
+DosageErr
+        MOV  R0, #INVALID_DOSAGE
+        MOV  R1, R4
+        BL   Handle_Error
+        B    NextP
 
-        BL Store_Error_Record
+MemErr
+        MOV  R0, #MEMORY_OVERFLOW
+        MOV  R1, R4
+        BL   Handle_Error
+        B    NextP
 
-        POP {R0-R12, LR}
-        BX LR
+Done
+        POP  {R4-R12, PC}
 
-; =============================
-; CHECK REPEATED SENSOR VALUES
-; R0 = buffer base
-; =============================
-Check_Repeated
-        PUSH {R1-R7, LR}
+; ------------------------------
+; Check_Buffer_AllSame
+; ------------------------------
+Check_Buffer_AllSame
+        PUSH {R1-R4, LR}
+        LDR  R1, [R5]               ; first value
+        MOV  R2, #1
+CB_Loop
+        CMP  R2, #BUF_WORDS
+        BGE  AllSame
+        LDR  R3, [R5, R2, LSL #2]
+        CMP  R3, R1
+        BNE  NotSame
+        ADD  R2, R2, #1
+        B    CB_Loop
+AllSame
+        MOV  R0, #0
+        POP  {R1-R4, PC}
+NotSame
+        MOV  R0, #1
+        POP  {R1-R4, PC}
 
-        LDR R1, [R0]            ; first value
-        MOV R2, #1
-        MOV R3, #1
+; ------------------------------
+; Handle_Error
+; R0 = error code
+; R1 = patient index
+; ------------------------------
+Handle_Error
+        PUSH {R2-R7, LR}
 
-RepeatLoop
-        LDR R4, [R0, R3, LSL #2]
-        CMP R4, R1
-        BNE ExitRepeat
+        ; Set patient error flag
+        LDR  R2, =ERROR_FLAG
+        ADD  R2, R2, R1
+        MOV  R3, #1
+        STRB R3, [R2]
 
-        ADD R2, R2, #1
-        MOV  R3, #SENSOR_REPEAT
-        CMP  R2, R3
-        BGE  Set_Error
-		
-        ADD R3, R3, #1
-        CMP R3, #10
-        BLT RepeatLoop
+        ; Compute patient’s flash block base
+        LDR  R4, =ERROR_FLASH_LOG
+        MOV  R5, #FLASH_BLOCK
+        MUL  R5, R1, R5
+        ADD  R4, R4, R5              ; R4 = base for patient
 
-ExitRepeat
-        POP {R1-R7, LR}
-        BX LR
+        ; Compute offset for next record
+        LDR  R5, =ERROR_LOG_INDEX
+        LDR  R6, [R5, R1, LSL #2]   ; current record index
+        MOV  R7, #REC_SIZE
+        MUL  R7, R6, R7
+        ADD  R4, R4, R7              ; R4 = address to write
 
-; =============================
-; STORE ERROR RECORD (FLASH SIM)
-; =============================
-Store_Error_Record
-        PUSH {R0-R3, LR}
+        ; Write 16-byte error record (simple)
+        STR  R0, [R4, #0]            ; error code
+        STR  R1, [R4, #4]            ; patient index
+        MOV  R7, #0
+        STR  R7, [R4, #8]            ; timestamp (placeholder)
+        STR  R7, [R4, #12]
 
-        LDR R0, =ERROR_FLASH_LOG
-        LDR R1, =ERROR_LOG_INDEX
-        LDR R2, [R1]
+        ; Increment log index
+        ADD  R6, R6, #1
+        STR  R6, [R5, R1, LSL #2]
 
-        ADD R0, R0, R2, LSL #2
-        MOV R3, #0xEE
-        STR R3, [R0]
-
-        ADD R2, R2, #1
-        STR R2, [R1]
-
-        POP {R0-R3, LR}
-        BX LR
+        POP  {R2-R7, PC}
 
         END
