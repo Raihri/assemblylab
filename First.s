@@ -1,41 +1,148 @@
-
-        AREA Adress, DATA, READWRITE
-PATIENT_RECORD  SPACE 32      
-PATIENT_NAME  DCB "unga bunga", 0
-MED_LIST      DCD 1,2,3,4,5	
-	    AREA first,CODE,READONLY
+		AREA Module1, CODE, READONLY
 		EXPORT First_module
-        
+		IMPORT PATIENT_ARRAY
+		IMPORT MAX_PATIENTS
+		IMPORT PATIENT_SIZE
+		IMPORT HR_BUFFER
+		IMPORT BP_BUFFER
+		IMPORT O2_BUFFER
+		IMPORT ALERT_COUNT_ARRAY
+		IMPORT VITAL_INDEX
+
 First_module
-        LDR R0, =PATIENT_RECORD  ; Base address 
+    PUSH {R0-R9, LR}
+	LDR R0, =VITAL_INDEX
+    MOV R1, #0
+    STRB R1, [R0, #0]
+    STRB R1, [R0, #1]
+    STRB R1, [R0, #2]
+    MOV R3, #0        
 
-        ; Patient ID
-        MOV R1, #12345
-        STR R1, [R0, #0]
+    LDR R0, =PATIENT_ARRAY      ; Base of patient structs
+    LDR R1, =MAX_PATIENTS
+    LDR R1, [R1]               ; Number of patients (3)
+    LDR R2, =PATIENT_SIZE
+    LDR R2, [R2]               ; Size of one struct (44)
+              ; patient index
 
-        ; Name pointer 
-        LDR R1, =PATIENT_NAME
-        STR R1, [R0, #4]
+initLoop
+    CMP R3, R1
+    BEQ initDone
 
-        ; Age
-        MOV R1, #25
-        STRB R1, [R0, #8]
+    ; R4 = &PATIENT[patient] = PATIENT_ARRAY + (index * 44)
+    MOV R4, R3
+    MUL R4, R4, R2             ; index * 44
+    ADD R4, R0, R4             ; R4 = &patient_struct
 
-        ; Ward number
-        MOV R1, #101
-        STRH R1, [R0, #0x0A]
+    ; ---------- Patient ID ----------
+    LDR R5, =RANDOM_IDS
+    LDR R5, [R5, R3, LSL #2]
+    STR R5, [R4, #0]
 
-        ; Treatment 
-        MOV R1, #3
-        STRB R1, [R0, #0x0C]
+    ; ---------- Name pointer ----------
+    LDR R5, =NameList
+    LDR R5, [R5, R3, LSL #2]
+    STR R5, [R4, #4]
 
-        ; Room Rate
-        MOV R1, #5000
-        STR R1, [R0, #0x10]
+    ; ---------- Age ----------
+    LDR R5, =RANDOM_AGES
+    LDRB R5, [R5, R3]
+    STRB R5, [R4, #8]
 
-        ;med pointer
-        LDR R1, =MED_LIST
-        STR R1, [R0, #0x14]
+    ; ---------- Ward ----------
+    LDR R5, =RANDOM_WARDS
+    LDRH R5, [R5, R3, LSL #1]
+    STRH R5, [R4, #10]
 
-        BX  LR
-		
+    ; ---------- Treatment code ----------
+    LDR R5, =TREATMENT_CODES
+    LDRB R5, [R5, R3]
+    STRB R5, [R4, #12]
+
+    ; ---------- Room rate ----------
+    LDR R5, =ROOM_RATES
+    LDR R5, [R5, R3, LSL #2]
+    STR R5, [R4, #16]
+
+    ; ---------- Medicine list pointer ----------
+    LDR R5, =MedListPointers
+    LDR R5, [R5, R3, LSL #2]
+    STR R5, [R4, #20]
+
+    ; ---------- Vital buffer pointers ----------
+    ; Each buffer is 40 bytes per patient (10 readings * 4 bytes)
+    ; Offset = patient_index * 40
+    MOV R5, R3
+    MOV R6, #40                ; 10 readings * 4 bytes = 40
+    MUL R5, R5, R6             ; R5 = patient_index * 40
+
+    ; HR buffer pointer
+    LDR R6, =HR_BUFFER
+    ADD R7, R6, R5             ; HR_BUFFER + (index * 40)
+    STR R7, [R4, #24]
+
+    ; BP buffer pointer
+    LDR R6, =BP_BUFFER
+    ADD R7, R6, R5             ; BP_BUFFER + (index * 40)
+    STR R7, [R4, #28]
+
+    ; O2 buffer pointer
+    LDR R6, =O2_BUFFER
+    ADD R7, R6, R5             ; O2_BUFFER + (index * 40)
+    STR R7, [R4, #32]
+
+    ; Clear remaining struct bytes (offsets 36-43)
+    MOV R5, #0
+    STR R5, [R4, #36]          ; Clear 36-39
+    STR R5, [R4, #40]          ; Clear 40-43
+
+    ; ---------- Initialize alert count ----------
+    LDR R6, =ALERT_COUNT_ARRAY
+    MOV R7, #0
+    STR R7, [R6, R3, LSL #2]
+
+    ADD R3, R3, #1
+    B initLoop
+
+initDone
+    POP {R0-R9, LR}
+    BX LR
+
+     AREA PatientData, DATA, READWRITE
+
+
+;  Patient ID
+RANDOM_IDS      DCD 143, 256, 187
+
+;  Age
+RANDOM_AGES     DCB 19, 23, 28
+
+;  Ward Number
+RANDOM_WARDS    DCW 12, 7, 22
+
+; Treatment Code
+TREATMENT_CODES DCB 5, 2, 9
+
+;  Room Rate
+ROOM_RATES      DCD 1500, 2300, 1800
+
+
+; NAME LIST (pointers)
+
+NameList        DCD Name1, Name2, Name3
+
+Name1           DCB "RAIMA",0
+Name2           DCB "AYMAN",0
+Name3           DCB "TANVIR",0
+
+
+; MEDICINE LIST POINTERS
+
+MedListPointers DCD ML1, ML2, ML3
+
+ML1             DCD 0xAAA1,0xAAA2
+ML2             DCD 0xBBB1,0xBBB2
+ML3             DCD 0xCCC1,0xCCC2
+
+        END
+      
